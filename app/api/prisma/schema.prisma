@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  password      String    // bcrypt hashed
+  isAdmin       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // User settings
+  language      String    @default("en")
+  autoTheme     Boolean   @default(true)
+  darkTheme     String?
+  lightTheme    String?
+  aiFeaturesDisabled Boolean @default(false)
+  avatarUrl     String?
+
+  // Relations
+  apiKeys       ApiKey[]
+  settings      UserSettings?
+
+  @@map("users")
+}
+
+model ApiKey {
+  id            String    @id @default(uuid())
+  name          String
+  key           String    @unique // The actual key (plaintext, only shown once)
+  keyPrefix     String    // First 8 chars for display
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime?
+  
+  @@map("api_keys")
+}
+
+model UserSettings {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language      String    @default("en")
+  autoTheme     Boolean   @default(true)
+  darkTheme     String?   @default("deep-space")
+  lightTheme    String?   @default("taskscape")
+  aiFeaturesDisabled Boolean @default(false)
+  
+  @@map("user_settings")
+}
+
+model AppSettings {
+  id                  String    @id @default(uuid())
+  registrationEnabled Boolean   @default(true)
+  commentsEnabled    Boolean   @default(true)
+  aiApiUrl            String?
+  aiApiKey            String?   // Encrypted or masked
+  aiModel             String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("app_settings")
+}

@@ -1,0 +1,29 @@
+name: Dev Docker Compose
+
+on:
+  push:
+    branches: [dev, develop, feature/*]
+  pull_request:
+    branches: [main, master, dev, develop]
+
+jobs:
+  test-compose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+
+      - name: Build and test with docker compose
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
+          # Run health checks or tests here
+          sleep 10
+          curl -f http://localhost:3000/api/health || exit 1
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml down

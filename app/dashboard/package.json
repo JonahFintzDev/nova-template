@@ -1,0 +1,42 @@
+{
+  "name": "nova-template-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx,vue",
+    "format": "prettier --write \"src/**/*.{ts,tsx,vue,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,vue,json,css}\""
+  },
+  "dependencies": {
+    "@vuepic/vue-datepicker": "^4.0.1",
+    "axios": "^1.7.7",
+    "dayjs": "^1.11.13",
+    "lucide-vue-next": "^0.468.0",
+    "pinia": "^2.2.4",
+    "vue": "^3.5.12",
+    "vue-color": "^2.8.2",
+    "vue-i18n": "^10.0.4",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@tsconfig/node20": "^20.1.4",
+    "@types/node": "^22.7.9",
+    "@typescript-eslint/eslint-plugin": "^8.13.0",
+    "@typescript-eslint/parser": "^8.13.0",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@vue/compiler-sfc": "^3.5.12",
+    "@vue/eslint-config-typescript": "^13.0.0",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-vue": "^9.29.1",
+    "gsap": "^3.12.5",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vue-tsc": "^2.1.6"
+  }
+}

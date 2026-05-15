@@ -1,0 +1,215 @@
+<script setup lang="ts">
+// node_modules
+import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+// classes
+import { adminApi } from '@/classes/api';
+
+// components
+import PageHeader from '@/components/layout/PageHeader.vue';
+import PageShell from '@/components/layout/PageShell.vue';
+
+// stores
+import { useAuthStore } from '@/stores/auth';
+
+// types
+import type { User } from '@/@types/index';
+
+// -------------------------------------------------- Store --------------------------------------------------
+const authStore = useAuthStore();
+const { t } = useI18n();
+
+// -------------------------------------------------- Data --------------------------------------------------
+const tab = ref<'users' | 'settings'>('users');
+const users = ref<User[]>([]);
+const bRegistration = ref(true);
+const bCommentsEnabled = ref(true);
+const bLoading = ref(false);
+const deleteTarget = ref<User | null>(null);
+
+// -------------------------------------------------- Lifecycle --------------------------------------------------
+onMounted(async () => {
+  await refresh();
+});
+
+// -------------------------------------------------- Methods --------------------------------------------------
+const refresh = async (): Promise<void> => {
+  bLoading.value = true;
+  try {
+    users.value = await adminApi.listUsers();
+    const settings = await adminApi.getSettings();
+    bRegistration.value = settings.registrationEnabled;
+    bCommentsEnabled.value = settings.commentsEnabled;
+  } finally {
+    bLoading.value = false;
+  }
+};
+
+const isSelf = (user: User): boolean => {
+  if (authStore.userId) {
+    return user.id === authStore.userId;
+  }
+  return user.username === authStore.username;
+};
+
+const toggleAdmin = async (user: User): Promise<void> => {
+  if (isSelf(user)) {
+    return;
+  }
+  await adminApi.updateUser(user.id, { isAdmin: !user.isAdmin });
+  await refresh();
+};
+
+const confirmDelete = async (): Promise<void> => {
+  if (!deleteTarget.value) {
+    return;
+  }
+  await adminApi.deleteUser(deleteTarget.value.id);
+  deleteTarget.value = null;
+  await refresh();
+};
+
+const setRegistrationEnabled = async (enabled: boolean): Promise<void> => {
+  bRegistration.value = enabled;
+  await adminApi.updateSettings({ registrationEnabled: enabled });
+};
+
+const setCommentsEnabled = async (enabled: boolean): Promise<void> => {
+  bCommentsEnabled.value = enabled;
+  await adminApi.updateSettings({ commentsEnabled: enabled });
+};
+</script>
+
+<template>
+  <PageShell>
+    <PageHeader :title="t('admin.title')" />
+    <nav class="tab-navigation mb-6">
+      <button type="button" :class="{ 'is-active': tab === 'users' }" @click="tab = 'users'">
+        {{ t('admin.users') }}
+      </button>
+      <button type="button" :class="{ 'is-active': tab === 'settings' }" @click="tab = 'settings'">
+        {{ t('admin.settings') }}
+      </button>
+    </nav>
+
+    <!-- Users Tab -->
+    <div v-if="tab === 'users'" class="overflow-x-auto rounded-lg border border-border bg-surface">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-border bg-card/40 text-text-muted">
+          <tr>
+            <th class="px-4 py-2">{{ t('auth.username') }}</th>
+            <th class="px-4 py-2">{{ t('admin.isAdmin') }}</th>
+            <th class="px-4 py-2">{{ t('admin.createdAt') }}</th>
+            <th class="px-4 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="user in users" :key="user.id" class="border-b border-border/60">
+            <td class="px-4 py-2">{{ user.username }}</td>
+            <td class="px-4 py-2">{{ user.isAdmin ? '✓' : '—' }}</td>
+            <td class="px-4 py-2 text-text-muted">
+              {{ new Date(user.createdAt).toLocaleString() }}
+            </td>
+            <td class="px-4 py-2 text-end">
+              <button
+                type="button"
+                class="button is-transparent text-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="isSelf(user)"
+                :title="isSelf(user) ? t('admin.cannotSelf') : undefined"
+                @click="toggleAdmin(user)"
+              >
+                {{ t('admin.toggleAdmin') }}
+              </button>
+              <button
+                type="button"
+                class="button is-destructive text-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="isSelf(user)"
+                :title="isSelf(user) ? t('admin.cannotSelf') : undefined"
+                @click="deleteTarget = user"
+              >
+                {{ t('admin.deleteUser') }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-if="bLoading" class="p-4 text-text-muted">{{ t('common.loading') }}</p>
+    </div>
+
+    <!-- Settings Tab -->
+    <div v-else class="rounded-lg border border-border bg-surface p-4 space-y-4">
+      <div class="field">
+        <label class="label">{{ t('admin.registration') }}</label>
+        <div
+          class="inline-flex w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
+        >
+          <button
+            type="button"
+            class="button !h-9 !max-h-9 !min-h-9 shrink-0 border-0 px-4 py-0 text-sm"
+            :class="bRegistration ? 'is-primary' : 'is-transparent'"
+            @click="setRegistrationEnabled(true)"
+          >
+            {{ t('admin.registrationOn') }}
+          </button>
+          <button
+            type="button"
+            class="button !h-9 !max-h-9 !min-h-9 shrink-0 border-0 px-4 py-0 text-sm"
+            :class="!bRegistration ? 'is-primary' : 'is-transparent'"
+            @click="setRegistrationEnabled(false)"
+          >
+            {{ t('admin.registrationOff') }}
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label">{{ t('admin.comments') }}</label>
+        <div
+          class="inline-flex w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
+        >
+          <button
+            type="button"
+            class="button !h-9 !max-h-9 !min-h-9 shrink-0 border-0 px-4 py-0 text-sm"
+            :class="bCommentsEnabled ? 'is-primary' : 'is-transparent'"
+            @click="setCommentsEnabled(true)"
+          >
+            {{ t('admin.commentsOn') }}
+          </button>
+          <button
+            type="button"
+            class="button !h-9 !max-h-9 !min-h-9 shrink-0 border-0 px-4 py-0 text-sm"
+            :class="!bCommentsEnabled ? 'is-primary' : 'is-transparent'"
+            @click="setCommentsEnabled(false)"
+          >
+            {{ t('admin.commentsOff') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div
+      v-if="deleteTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click="deleteTarget = null"
+    >
+      <div
+        class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
+        @click.stop
+      >
+        <h2 class="mb-2 text-xl font-semibold text-text-primary">{{ t('admin.deleteUser') }}</h2>
+        <p class="mb-6 text-text-muted">
+          {{ t('admin.confirmDeleteUser', { name: deleteTarget.username }) }}
+        </p>
+        <div class="flex justify-end gap-3">
+          <button type="button" class="button is-transparent" @click="deleteTarget = null">
+            {{ t('common.cancel') }}
+          </button>
+          <button type="button" class="button is-destructive" @click="confirmDelete">
+            {{ t('common.delete') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </PageShell>
+</template>

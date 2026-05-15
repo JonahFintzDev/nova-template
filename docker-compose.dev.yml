@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ./app/api
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./app/api:/app
+      - /app/node_modules
+      - ./app/api/data:/app/data
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=file:/app/data/dev.db
+      - JWT_SECRET=dev-secret-change-in-production
+      - VITE_API_URL=http://localhost:3000
+    command: npm run dev
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./app/dashboard
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./app/dashboard:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://api:3000
+    command: npm run dev
+    depends_on:
+      - api
+    restart: unless-stopped

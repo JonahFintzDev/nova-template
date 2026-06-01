@@ -129,12 +129,12 @@ const cancelTwoFactor = (): void => {
   <div class="relative flex min-h-dvh items-center justify-center overflow-hidden bg-bg px-4">
     <!-- Gradient orb — top-right -->
     <div
-      class="pointer-events-none absolute -right-40 -top-40 h-[500px] w-[500px] rounded-full opacity-25"
+      class="pointer-events-none absolute -right-40 -top-40 h-125 w-125 rounded-full opacity-25"
       style="background: radial-gradient(circle, #4f46e5 0%, transparent 65%); filter: blur(48px)"
     />
     <!-- Gradient orb — bottom-left -->
     <div
-      class="pointer-events-none absolute -bottom-40 -left-40 h-[500px] w-[500px] rounded-full opacity-20"
+      class="pointer-events-none absolute -bottom-40 -left-40 h-125 w-125 rounded-full opacity-20"
       style="background: radial-gradient(circle, #7c3aed 0%, transparent 65%); filter: blur(60px)"
     />
 
@@ -158,7 +158,7 @@ const cancelTwoFactor = (): void => {
         >
           <button
             type="button"
-            class="button !h-9 !max-h-9 !min-h-9 shrink-0 border-0 px-4 py-0 text-sm"
+            class="button h-9! max-h-9! min-h-9! shrink-0 border-0 px-4 py-0 text-sm"
             :class="!bRegisterMode ? 'is-primary' : 'is-transparent'"
             @click="bRegisterMode = false"
           >
@@ -166,7 +166,7 @@ const cancelTwoFactor = (): void => {
           </button>
           <button
             type="button"
-            class="button !h-9 !max-h-9 !min-h-9 shrink-0 border-0 px-4 py-0 text-sm"
+            class="button h-9! max-h-9! min-h-9! shrink-0 border-0 px-4 py-0 text-sm"
             :class="bRegisterMode ? 'is-primary' : 'is-transparent'"
             @click="bRegisterMode = true"
           >

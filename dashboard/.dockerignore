@@ -1,8 +1,6 @@
-node_modules
-npm-debug.log
-.git
-.env
-.DS_Store
-*.md
-!README.md
-dist/
+/node_modules
+.gitlab-ci.yml
+README.md
+Dockerfile.dev
+Dockerfile
+.gitignore

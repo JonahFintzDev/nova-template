@@ -1,18 +1,19 @@
-import tailwindcss from '@tailwindcss/vite';
-import vue from '@vitejs/plugin-vue';
-import { resolve } from 'path';
-import { defineConfig } from 'vite';
+import { fileURLToPath, URL } from 'node:url';
 
+import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+
+// https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
+  plugins: [vue()],
+  server: {
+    port: 8080,
+    allowedHosts: true,
+  },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
-  },
-  build: {
-    outDir: resolve(__dirname, '../../api/dist/dashboard'),
-    emptyOutDir: true,
   },
   server: {
     port: 3001,

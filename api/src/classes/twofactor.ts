@@ -1,37 +1,15 @@
-import { authenticator } from 'otplib';
-import { toDataURL } from 'qrcode';
-import { db } from './database';
-import { config } from './config';
-
-// Configure otplib
-authenticator.options = {
-  step: 30,
-  window: 1,
-};
+import * as authenticator from "otplib";
+import { db } from "./database";
+import { config } from "./config";
 
 // Generate a new TOTP secret
 export const generateTwoFactorSecret = (): string => {
   return authenticator.generateSecret();
 };
 
-// Generate a QR code URL for TOTP setup
-export const generateTwoFactorQRCode = async (
-  username: string,
-  secret: string,
-  issuer: string = 'Nova',
-): Promise<string> => {
-  const otpAuthUrl = authenticator.keyuri(username, issuer, secret);
-  return otpAuthUrl;
-};
-
-// Generate QR code as data URL
-export const generateQRCodeDataURL = async (otpAuthUrl: string): Promise<string> => {
-  return await toDataURL(otpAuthUrl, { width: 200 });
-};
-
 // Verify a TOTP code
 export const verifyTwoFactorCode = (code: string, secret: string): boolean => {
-  return authenticator.verify({ token: code, secret });
+  return authenticator.verifySync({ token: code, secret }).valid;
 };
 
 // Generate backup codes
@@ -127,20 +105,9 @@ export const getTwoFactorSetupInfo = async (userId: string) => {
     return null;
   }
 
-  let qrCodeUrl: string | null = null;
-  if (user.twoFactorSecret) {
-    const otpAuthUrl = authenticator.keyuri(
-      user.username,
-      config.nextauthUrl || 'Nova',
-      user.twoFactorSecret,
-    );
-    qrCodeUrl = await generateQRCodeDataURL(otpAuthUrl);
-  }
-
   return {
     enabled: user.twoFactorEnabled,
     secret: user.twoFactorSecret,
     backupCodes: user.backupCodes,
-    qrCodeUrl,
   };
 };

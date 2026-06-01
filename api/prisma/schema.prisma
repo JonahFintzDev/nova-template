@@ -1,11 +1,10 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["multiSchema"]
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
   schemas  = ["public"]
 }
 
@@ -14,79 +13,31 @@ datasource db {
 // ============================================
 
 model User {
-  id                 String    @id @default(cuid())
-  email              String    @unique
-  username           String    @unique
-  password           String?
-  name               String?
-  emailVerified      DateTime?
-  isAdmin            Boolean   @default(false)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String?
+  name      String?
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // 2FA
-  twoFactorSecret    String?
-  twoFactorEnabled   Boolean   @default(false)
-  backupCodes        String[]
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean  @default(false)
+  backupCodes      String[]
 
   // User settings (denormalised for fast reads)
-  language           String    @default("en")
-  theme              String    @default("Auto")
+  language           String  @default("en")
   avatarUrl          String?
-  autoTheme          Boolean   @default(true)
-  darkTheme          String?
-  lightTheme         String?
-  aiFeaturesDisabled Boolean   @default(false)
+  theme              Theme   @default(AUTO)
+  aiFeaturesDisabled Boolean @default(false)
 
   // Relations
-  accounts           Account[]
-  sessions           Session[]
-  apiKeys            ApiKey[]
-  settings           UserSettings?
+  apiKeys ApiKey[]
 
-  @@schema("public")
   @@map("users")
-}
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-  user              User    @relation(fields: [userId], references: [id])
-
-  @@unique([provider, providerAccountId])
   @@schema("public")
-  @@map("accounts")
-}
-
-model Session {
-  id           String   @id
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id])
-
-  @@schema("public")
-  @@map("sessions")
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-  @@schema("public")
-  @@map("verification_tokens")
 }
 
 model ApiKey {
@@ -99,36 +50,27 @@ model ApiKey {
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
 
-  @@schema("public")
   @@map("api_keys")
+  @@schema("public")
 }
 
 model AppSettings {
   id                  String   @id @default(cuid())
   registrationEnabled Boolean  @default(true)
-  commentsEnabled     Boolean  @default(true)
   aiApiUrl            String?
   aiApiKey            String?
   aiModel             String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  @@schema("public")
   @@map("app_settings")
+  @@schema("public")
 }
 
-model UserSettings {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  language           String   @default("en")
-  autoTheme          Boolean  @default(true)
-  darkTheme          String?
-  lightTheme         String?
-  aiFeaturesDisabled Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+enum Theme {
+  LIGHT
+  DARK
+  AUTO
 
   @@schema("public")
-  @@map("user_settings")
 }

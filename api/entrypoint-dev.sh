@@ -5,4 +5,4 @@ set -e
 npx prisma db push
 
 # start dev server
-npm run start
+npm run dev

@@ -1,43 +1,24 @@
 version: "3.8"
 name: nova-template
 services:
-  db:
-    image: postgres:15
-    container_name: nova-postgres-dev
-    environment:
-      POSTGRES_DB: runnova
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5321:5432"
-    volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d runnova"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   api:
     build:
       context: ./api
-      dockerfile: Dockerfile.dev
+      dockerfile: dev.Dockerfile
     ports:
       - "26110:3000"
     volumes:
       - ./api:/app
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://user:password@db:5432/runnova?schema=public
-      - NEXTAUTH_SECRET=dev-nextauth-secret-change-in-production
+      - DATABASE_URL=postgresql://dev:password@postgresql:5432/nova-template
+      - NEXTAUTH_SECRET=kladjsfnsfgposadjmfglökjnsdfkljgjnsdlkfjgnklsdjfnglknkjl
       - NEXTAUTH_URL=http://10.0.10.110:26110
       - JWT_SECRET=dev-secret-change-in-production
-    depends_on:
-      db:
-        condition: service_healthy
     command: npm run dev
     restart: unless-stopped
+    networks:
+      - postgresql
 
   dashboard:
     build:
@@ -57,3 +38,6 @@ services:
 
 volumes:
   postgres_data_dev:
+networks:
+  postgresql:
+    external: true

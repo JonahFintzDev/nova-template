@@ -1,6 +1,6 @@
-import { User, ApiKey, UserSettings, AppSettings } from '@prisma/client';
+import { User, ApiKey, AppSettings } from "../../generated/prisma/client";
 
-export type { User, ApiKey, UserSettings, AppSettings };
+export type { User, ApiKey, AppSettings };
 
 export interface ApiKeyWithPlainKey {
   id: string;
@@ -43,5 +43,4 @@ export interface HealthResponse {
   ok: boolean;
   needsSetup: boolean;
   registrationEnabled: boolean;
-  commentsEnabled: boolean;
 }

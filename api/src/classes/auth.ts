@@ -1,19 +1,19 @@
-import { FastifyInstance, FastifyPluginOptions, FastifyRequest, FastifyReply } from 'fastify';
-import { verify } from 'jsonwebtoken';
-import { config } from './config';
-import type { JwtPayload } from '../@types';
+import { FastifyInstance, FastifyPluginOptions, FastifyRequest, FastifyReply } from "fastify";
+import { verify } from "jsonwebtoken";
+import { config } from "./config";
+import type { JwtPayload } from "../@types";
 
 interface AuthOptions {
   jwtSecret?: string;
 }
 
-declare module '@fastify/jwt' {
+declare module "@fastify/jwt" {
   interface FastifyJWT {
     user: JwtPayload;
   }
 }
 
-declare module 'fastify' {
+declare module "fastify" {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     config: typeof config;
@@ -27,19 +27,19 @@ const DEFAULT_OPTIONS: AuthOptions = {
 export const registerAuth = (fastify: FastifyInstance, options: FastifyPluginOptions = {}) => {
   const opts = { ...DEFAULT_OPTIONS, ...options } as AuthOptions;
 
-  fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const authHeader = request.headers.authorization;
 
       if (!authHeader) {
-        await reply.code(401).send({ error: 'Unauthorized: No token provided' });
+        await reply.code(401).send({ error: "Unauthorized: No token provided" });
         return;
       }
 
-      const token = authHeader.replace('Bearer ', '');
+      const token = authHeader.replace("Bearer ", "");
 
       if (!token) {
-        await reply.code(401).send({ error: 'Unauthorized: Invalid token format' });
+        await reply.code(401).send({ error: "Unauthorized: Invalid token format" });
         return;
       }
 
@@ -47,7 +47,7 @@ export const registerAuth = (fastify: FastifyInstance, options: FastifyPluginOpt
       request.user = decoded;
     } catch (error) {
       await reply.code(401).send({
-        error: 'Unauthorized: Invalid token',
+        error: "Unauthorized: Invalid token",
         details: error instanceof Error ? error.message : String(error),
       });
     }

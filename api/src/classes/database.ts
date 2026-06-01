@@ -1,9 +1,12 @@
-import { PrismaClient } from '@prisma/client';
+// node_modules
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+// generated
+import { PrismaClient } from "../../generated/prisma/client";
 
-// Ensure only one instance is created
-export const db = prisma;
+export const db = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // Health check for database
 export const checkDatabase = async (): Promise<boolean> => {
@@ -24,7 +27,6 @@ export const initializeDatabase = async (): Promise<void> => {
     await db.appSettings.create({
       data: {
         registrationEnabled: true,
-        commentsEnabled: true,
       },
     });
   }
@@ -32,5 +34,5 @@ export const initializeDatabase = async (): Promise<void> => {
 
 // Close database connection gracefully
 export const closeDatabase = async (): Promise<void> => {
-  await prisma.$disconnect();
+  await db.$disconnect();
 };

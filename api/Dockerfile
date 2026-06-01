@@ -1,44 +1,47 @@
-# Build stage
-FROM node:24 AS builder
+# --------------------------------------------------
+# dashboard build stage
+# --------------------------------------------------
+FROM node:26 AS dashboard-build-stage
 
-WORKDIR /app
+WORKDIR /build/dashboard
 
 # Copy package files
-COPY package*.json ./
+COPY dashboard/package.json ./
+COPY dashboard/package-lock.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source files
-COPY . .
+COPY dashboard ./
 
 # Build the application
 RUN npm run build
 
-# Production stage
-FROM node:24 AS production
-
+# --------------------------------------------------
+# production stage
+# --------------------------------------------------
+FROM node:26 AS production
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY api/package.json ./
+COPY api/package-lock.json ./
 
 # Install production dependencies
-RUN npm ci --only=production
+RUN npm ci --omit=dev
+
+# Prisma schema + generate client for runtime
+COPY api/prisma ./prisma
+COPY api/prisma.config.ts ./
+ENV DATABASE_URL=postgresql://dev:dev@db:5432/dev
+RUN npx prisma generate
+
+# Copy source files
+COPY api/ ./
 
 # Copy built files from builder
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-
-# Create data directory for database
-RUN mkdir -p /app/data
-
-# Expose port
-EXPOSE 3000
-
-# Set environment variables
-ENV NODE_ENV=production
-ENV DATABASE_URL=file:./data/dev.db
+COPY --from=builder /build/dashboard /dashboard
 
 # Start the application
-CMD ["node", "dist/index.js"]
+ENTRYPOINT [ "/app/entrypoint.sh" ]

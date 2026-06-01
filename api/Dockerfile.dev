@@ -1,7 +1,11 @@
 # Development Dockerfile for API
-FROM node:20-alpine
+FROM node:24
 
 WORKDIR /app
+
+# Copy entrypoint outside /app so the source volume mount doesn't shadow it
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Copy package files
 COPY package*.json ./
@@ -18,5 +22,5 @@ RUN npx prisma generate
 # Expose port
 EXPOSE 3000
 
-# Start the development server
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npm", "run", "dev"]

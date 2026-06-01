@@ -3,9 +3,11 @@
 import dayjs from 'dayjs';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { Copy, Eye, EyeOff, RefreshCw, ShieldCheck, ShieldX } from 'lucide-vue-next';
 
 // classes
-import { apiKeysApi, avatarApi } from '@/classes/api';
+import { apiKeysApi, avatarApi, twoFactorApi } from '@/classes/api';
+import type { TwoFactorSetupInfo, TwoFactorGenerateResponse } from '@/classes/api';
 
 // types
 import type { ApiKey, ApiKeyWithPlainKey } from '@/@types/index';
@@ -34,7 +36,6 @@ const settingsStore = useSettingsStore();
 const tab = ref<'general' | 'security' | 'apiKeys'>('general');
 const appearance = ref<AppearanceChoice>('auto');
 const language = ref<LocaleCode>('en');
-const bAiFeaturesDisabled = ref(false);
 const currentPassword = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
@@ -56,6 +57,27 @@ const apiKeysList = ref<ApiKey[]>([]);
 const newKeyName = ref('');
 const newKeyValue = ref<ApiKeyWithPlainKey | null>(null);
 
+// 2FA
+const bTwoFactorLoading = ref(false);
+const twoFactorErrorMessage = ref('');
+const twoFactorSuccessMessage = ref('');
+const bShowBackupCodes = ref(false);
+const bShowNewBackupCodes = ref(false);
+const bShowRegenerateForm = ref(false);
+const twoFactorPassword = ref('');
+const regeneratePassword = ref('');
+
+const setupInfo = ref<TwoFactorSetupInfo>({
+  enabled: false,
+  qrCodeUrl: null,
+  secret: null,
+  backupCodes: null,
+});
+
+const newSetupInfo = ref<TwoFactorGenerateResponse | null>(null);
+const verificationCode = ref('');
+const bVerifying = ref(false);
+
 const apiBaseUrl = computed(() => {
   const configured = (import.meta.env.VITE_API_URL as string | undefined)?.trim() ?? '';
   if (!configured) {
@@ -73,9 +95,9 @@ onMounted(async () => {
     lightTheme: settings.lightTheme,
   });
   language.value = settings.language === 'de' ? 'de' : 'en';
-  bAiFeaturesDisabled.value = settings.aiFeaturesDisabled;
   locale.value = language.value;
   dayjs.locale(language.value);
+  await fetchTwoFactorSetupInfo();
   applyUserThemePreferences({
     autoTheme: settings.autoTheme,
     darkTheme: settings.darkTheme,
@@ -134,16 +156,6 @@ const onLanguageChange = async (code: LocaleCode): Promise<void> => {
   await settingsStore.update({ language: code });
 };
 
-const onToggleAiFeatures = async (): Promise<void> => {
-  const next = !bAiFeaturesDisabled.value;
-  bAiFeaturesDisabled.value = next;
-  try {
-    await settingsStore.update({ aiFeaturesDisabled: next });
-  } catch {
-    bAiFeaturesDisabled.value = !next;
-  }
-};
-
 const changePassword = async (): Promise<void> => {
   message.value = '';
   if (newPassword.value !== confirmPassword.value) {
@@ -162,6 +174,130 @@ const changePassword = async (): Promise<void> => {
   } finally {
     bSaving.value = false;
   }
+};
+
+// -------------------------------------------------- 2FA --------------------------------------------------
+
+const fetchTwoFactorSetupInfo = async (): Promise<void> => {
+  try {
+    bTwoFactorLoading.value = true;
+    twoFactorErrorMessage.value = '';
+    setupInfo.value = await twoFactorApi.getSetupInfo();
+  } catch {
+    twoFactorErrorMessage.value = t('common.error');
+  } finally {
+    bTwoFactorLoading.value = false;
+  }
+};
+
+const startTwoFactorSetup = async (): Promise<void> => {
+  try {
+    bTwoFactorLoading.value = true;
+    twoFactorErrorMessage.value = '';
+    twoFactorSuccessMessage.value = '';
+    newSetupInfo.value = await twoFactorApi.generateSecret();
+  } catch {
+    twoFactorErrorMessage.value = t('common.error');
+  } finally {
+    bTwoFactorLoading.value = false;
+  }
+};
+
+const enableTwoFactor = async (): Promise<void> => {
+  try {
+    bVerifying.value = true;
+    twoFactorErrorMessage.value = '';
+
+    if (!newSetupInfo.value) {
+      twoFactorErrorMessage.value = t('common.error');
+      return;
+    }
+
+    await twoFactorApi.enableTwoFactor(verificationCode.value);
+    twoFactorSuccessMessage.value = t('auth.twoFactorEnabled');
+    verificationCode.value = '';
+    newSetupInfo.value = null;
+    authStore.bTwoFactorEnabled = true;
+    await fetchTwoFactorSetupInfo();
+  } catch (error: unknown) {
+    const response = (error as { response?: { data?: { error?: string } } }).response;
+    twoFactorErrorMessage.value = response?.data?.error || t('common.error');
+  } finally {
+    bVerifying.value = false;
+  }
+};
+
+const disableTwoFactor = async (): Promise<void> => {
+  try {
+    bTwoFactorLoading.value = true;
+    twoFactorErrorMessage.value = '';
+    twoFactorSuccessMessage.value = '';
+
+    if (!twoFactorPassword.value) {
+      twoFactorErrorMessage.value = t('settings.currentPassword');
+      return;
+    }
+
+    await twoFactorApi.disableTwoFactor(twoFactorPassword.value);
+    twoFactorPassword.value = '';
+    twoFactorSuccessMessage.value = t('auth.twoFactorDisabled');
+    authStore.bTwoFactorEnabled = false;
+    await fetchTwoFactorSetupInfo();
+  } catch (error: unknown) {
+    const response = (error as { response?: { data?: { error?: string } } }).response;
+    twoFactorErrorMessage.value = response?.data?.error || t('common.error');
+  } finally {
+    bTwoFactorLoading.value = false;
+  }
+};
+
+const regenerateBackupCodes = async (): Promise<void> => {
+  try {
+    bTwoFactorLoading.value = true;
+    twoFactorErrorMessage.value = '';
+    twoFactorSuccessMessage.value = '';
+
+    if (!regeneratePassword.value) {
+      twoFactorErrorMessage.value = t('settings.currentPassword');
+      return;
+    }
+
+    const response = await twoFactorApi.regenerateBackupCodes(regeneratePassword.value);
+    regeneratePassword.value = '';
+    bShowRegenerateForm.value = false;
+    bShowNewBackupCodes.value = true;
+    if (setupInfo.value) {
+      setupInfo.value.backupCodes = response.backupCodes;
+    }
+    twoFactorSuccessMessage.value = t('common.success');
+  } catch (error: unknown) {
+    const response = (error as { response?: { data?: { error?: string } } }).response;
+    twoFactorErrorMessage.value = response?.data?.error || t('common.error');
+  } finally {
+    bTwoFactorLoading.value = false;
+  }
+};
+
+const copyToClipboard = async (text: string): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(text);
+    twoFactorSuccessMessage.value = t('common.copied');
+    setTimeout(() => {
+      twoFactorSuccessMessage.value = '';
+    }, 2000);
+  } catch {
+    twoFactorErrorMessage.value = t('common.error');
+  }
+};
+
+const copyAllBackupCodes = async (): Promise<void> => {
+  if (setupInfo.value.backupCodes) {
+    await copyToClipboard(setupInfo.value.backupCodes.join('\n'));
+  }
+};
+
+const toggleBackupCodes = (): void => {
+  bShowBackupCodes.value = !bShowBackupCodes.value;
 };
 
 // -------------------------------------------------- API Keys --------------------------------------------------
@@ -323,7 +459,7 @@ watch(tab, (newTab) => {
       <div class="field">
         <label class="label">{{ t('settings.theme') }}</label>
         <div
-          class="inline-flex w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
+          class="inline-flex self-start w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
         >
           <button
             type="button"
@@ -356,7 +492,7 @@ watch(tab, (newTab) => {
       <div class="field">
         <label class="label">{{ t('settings.displayLanguage') }}</label>
         <div
-          class="inline-flex w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
+          class="inline-flex self-start w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
         >
           <button
             type="button"
@@ -376,38 +512,232 @@ watch(tab, (newTab) => {
           </button>
         </div>
       </div>
-
-      <!-- AI Features -->
-      <div class="field">
-        <label class="label">{{ t('settings.aiFeatures') }}</label>
-        <div
-          class="flex items-center justify-between gap-4 rounded-lg border border-border bg-bg px-4 py-3"
-        >
-          <div>
-            <p class="text-sm font-medium text-text-primary">
-              {{ t('settings.aiFeaturesDisable') }}
-            </p>
-            <p class="text-xs text-text-muted">{{ t('settings.aiFeaturesDisableDesc') }}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="bAiFeaturesDisabled"
-            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
-            :class="bAiFeaturesDisabled ? 'bg-primary' : 'bg-border'"
-            @click="onToggleAiFeatures"
-          >
-            <span
-              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200"
-              :class="bAiFeaturesDisabled ? 'translate-x-5' : 'translate-x-0'"
-            />
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- Security Settings -->
     <div v-else-if="tab === 'security'" class="space-y-4">
+      <!-- Two-Factor Authentication -->
+      <div class="rounded-lg border border-border bg-surface p-4">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="font-semibold">{{ t('auth.twoFactor') }}</h3>
+            <p class="text-sm text-text-muted">
+              {{ setupInfo.enabled ? t('auth.twoFactorEnabled') : t('auth.twoFactorDisabled') }}
+            </p>
+          </div>
+          <span v-if="setupInfo.enabled" class="badge is-success">{{ t('common.enabled') }}</span>
+          <span v-else class="badge is-muted">{{ t('common.disabled') }}</span>
+        </div>
+
+        <div v-if="twoFactorErrorMessage" class="message is-error mb-4">
+          {{ twoFactorErrorMessage }}
+        </div>
+        <div v-if="twoFactorSuccessMessage" class="message is-success mb-4">
+          {{ twoFactorSuccessMessage }}
+        </div>
+
+        <!-- Enable 2FA -->
+        <div v-if="!setupInfo.enabled" class="space-y-4">
+          <template v-if="!newSetupInfo">
+            <button
+              class="button is-primary"
+              :disabled="bTwoFactorLoading"
+              @click="startTwoFactorSetup"
+            >
+              <ShieldCheck :size="16" />
+              {{ t('auth.enableTwoFactor') }}
+            </button>
+          </template>
+
+          <template v-if="newSetupInfo">
+            <div class="text-center">
+              <p class="text-sm text-text-muted mb-2">{{ t('auth.scanQRCode') }}</p>
+              <img
+                :src="newSetupInfo.qrCodeUrl"
+                alt="QR Code for 2FA setup"
+                class="mx-auto rounded-lg border border-border p-2 bg-bg"
+                style="width: 200px; height: 200px"
+              />
+              <p class="text-xs text-text-muted mt-2">
+                {{ t('auth.twoFactor') }}: {{ newSetupInfo.secret }}
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <label class="label">{{ t('auth.twoFactorCode') }}</label>
+              <div class="flex gap-2">
+                <div class="input-wrap flex-1">
+                  <input
+                    v-model="verificationCode"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    maxlength="6"
+                    :placeholder="t('auth.enterCode')"
+                    required
+                  />
+                </div>
+                <button
+                  class="button is-primary"
+                  :disabled="bVerifying || verificationCode.length !== 6"
+                  @click="enableTwoFactor"
+                >
+                  {{ t('auth.verify') }}
+                </button>
+              </div>
+            </div>
+
+            <button class="button is-transparent w-full" @click="newSetupInfo = null">
+              {{ t('common.cancel') }}
+            </button>
+          </template>
+        </div>
+
+        <!-- Disable 2FA -->
+        <div v-if="setupInfo.enabled" class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium mb-1">{{ t('auth.disableTwoFactor') }}</p>
+              <p class="text-xs text-text-muted">{{ t('auth.confirmDisableTwoFactor') }}</p>
+            </div>
+          </div>
+          <div class="flex gap-2 items-end">
+            <div class="input-wrap flex-1">
+              <input
+                v-model="twoFactorPassword"
+                type="password"
+                autocomplete="current-password"
+                :placeholder="t('settings.currentPassword')"
+                required
+              />
+            </div>
+            <button
+              class="button is-danger shrink-0"
+              :disabled="bTwoFactorLoading || !twoFactorPassword"
+              @click="disableTwoFactor"
+            >
+              <ShieldX :size="16" />
+              {{ t('auth.disableTwoFactor') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Backup Codes -->
+        <div v-if="setupInfo.enabled" class="mt-4 pt-4 border-t border-border">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="text-sm font-semibold">{{ t('auth.backupCodes') }}</h4>
+              <p class="text-xs text-text-muted">{{ t('auth.backupCodesDesc') }}</p>
+            </div>
+            <button
+              class="button is-transparent !p-2"
+              :disabled="bTwoFactorLoading"
+              @click="bShowRegenerateForm = !bShowRegenerateForm"
+            >
+              <RefreshCw :size="16" />
+            </button>
+          </div>
+
+          <!-- Regenerate form -->
+          <div
+            v-if="bShowRegenerateForm"
+            class="space-y-3 mb-4 p-3 rounded-lg bg-bg border border-border"
+          >
+            <div class="field">
+              <label class="label">{{ t('settings.currentPassword') }}</label>
+              <div class="input-wrap">
+                <input
+                  v-model="regeneratePassword"
+                  type="password"
+                  autocomplete="current-password"
+                  :placeholder="t('settings.currentPassword')"
+                />
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="button is-transparent flex-1"
+                @click="
+                  bShowRegenerateForm = false;
+                  regeneratePassword = '';
+                "
+              >
+                {{ t('common.cancel') }}
+              </button>
+              <button
+                class="button is-primary flex-1"
+                :disabled="bTwoFactorLoading || !regeneratePassword"
+                @click="regenerateBackupCodes"
+              >
+                <RefreshCw :size="16" />
+                {{ t('auth.backupCodes') }}
+              </button>
+            </div>
+          </div>
+
+          <template v-if="bShowNewBackupCodes && setupInfo.backupCodes">
+            <div class="message is-info mb-4">
+              <div class="mt-2 space-y-2">
+                <div
+                  v-for="(code, index) in setupInfo.backupCodes"
+                  :key="index"
+                  class="flex items-center gap-2"
+                >
+                  <span class="font-mono text-sm">{{ code }}</span>
+                  <button class="button is-transparent !p-1" @click="copyToClipboard(code)">
+                    <Copy :size="14" />
+                  </button>
+                </div>
+              </div>
+              <button class="button is-transparent mt-3" @click="bShowNewBackupCodes = false">
+                {{ t('common.cancel') }}
+              </button>
+            </div>
+          </template>
+
+          <template
+            v-if="setupInfo.backupCodes && setupInfo.backupCodes.length > 0 && !bShowNewBackupCodes"
+          >
+            <div class="flex items-center gap-2 mb-2">
+              <button class="button is-transparent" @click="toggleBackupCodes">
+                <template v-if="bShowBackupCodes">
+                  <EyeOff :size="16" />
+                  {{ t('common.cancel') }}
+                </template>
+                <template v-else>
+                  <Eye :size="16" />
+                  {{ t('auth.backupCodes') }} ({{ setupInfo.backupCodes.length }})
+                </template>
+              </button>
+              <button class="button is-transparent" @click="copyAllBackupCodes">
+                <Copy :size="16" />
+                {{ t('common.copy') }}
+              </button>
+            </div>
+
+            <div v-if="bShowBackupCodes" class="space-y-2">
+              <div
+                v-for="(code, index) in setupInfo.backupCodes"
+                :key="index"
+                class="flex items-center gap-2"
+              >
+                <span class="font-mono text-sm">{{ code }}</span>
+                <button class="button is-transparent !p-1" @click="copyToClipboard(code)">
+                  <Copy :size="14" />
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <template v-if="setupInfo.backupCodes && setupInfo.backupCodes.length === 0">
+            <div class="message is-warning">
+              <p class="text-sm">{{ t('auth.generateBackupCodes') }}</p>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Change Password -->
       <div class="rounded-lg border border-border bg-surface p-4">
         <div class="field">
           <label class="label">{{ t('settings.currentPassword') }}</label>
@@ -436,17 +766,22 @@ watch(tab, (newTab) => {
             class="border border-border"
           />
         </div>
+        <p
+          v-if="message"
+          class="message mt-3"
+          :class="message.includes('success') ? 'is-success' : 'is-error'"
+        >
+          {{ message }}
+        </p>
+        <button
+          type="button"
+          class="button is-primary mt-3"
+          :disabled="bSaving"
+          @click="changePassword"
+        >
+          {{ t('settings.savePassword') }}
+        </button>
       </div>
-      <p
-        v-if="message"
-        class="message"
-        :class="message.includes('success') ? 'is-success' : 'is-error'"
-      >
-        {{ message }}
-      </p>
-      <button type="button" class="button is-primary" :disabled="bSaving" @click="changePassword">
-        {{ t('settings.savePassword') }}
-      </button>
     </div>
 
     <!-- API Keys Settings -->

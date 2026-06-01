@@ -1,7 +1,6 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { db } from '../classes/database';
-import type { UserSettings } from '../@types';
 
 const settingsSchema = z.object({
   language: z.string().optional(),
@@ -11,7 +10,7 @@ const settingsSchema = z.object({
   aiFeaturesDisabled: z.boolean().optional(),
 });
 
-export const settingsRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOptions) => {
+export const settingsRoutes = async (fastify: FastifyInstance, _opts: FastifyPluginOptions) => {
   // Get user settings
   fastify.get('/api/settings', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     try {

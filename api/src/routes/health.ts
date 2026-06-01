@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { db } from '../classes/database';
 import type { HealthResponse } from '../@types';
 
-export const healthRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOptions) => {
+export const healthRoutes = async (fastify: FastifyInstance, _opts: FastifyPluginOptions) => {
   fastify.get('/api/health', async (request, reply) => {
     try {
       // Check database connectivity

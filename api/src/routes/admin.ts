@@ -2,7 +2,6 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { db } from '../classes/database';
 import { isAdmin } from '../classes/auth';
-import type { User, AppSettings } from '../@types';
 
 const updateUserSchema = z.object({
   isAdmin: z.boolean().optional(),
@@ -16,7 +15,7 @@ const updateSettingsSchema = z.object({
   aiModel: z.string().nullable().optional(),
 });
 
-export const adminRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOptions) => {
+export const adminRoutes = async (fastify: FastifyInstance, _opts: FastifyPluginOptions) => {
   // List all users
   fastify.get('/api/admin/users', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     try {
@@ -24,7 +23,7 @@ export const adminRoutes = async (fastify: FastifyInstance, opts: FastifyPluginO
         return reply.code(403).send({ error: 'Forbidden: Admin access required' });
       }
 
-      const users: User[] = await db.user.findMany({
+      const users = await db.user.findMany({
         select: {
           id: true,
           username: true,

@@ -55,6 +55,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AdminView.vue'),
         meta: { requiresAdmin: true, titleKey: 'admin.title' },
       },
+      {
+        path: 'ux-framework',
+        name: 'ux-framework',
+        component: () => import('@/views/UXFrameworkView.vue'),
+        meta: { titleKey: 'UX Framework' },
+      },
     ],
   },
 ];

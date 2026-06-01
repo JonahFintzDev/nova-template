@@ -1,5 +1,5 @@
 # Production Dockerfile for Dashboard
-FROM node:20-alpine AS builder
+FROM node:24 AS builder
 
 WORKDIR /app
 

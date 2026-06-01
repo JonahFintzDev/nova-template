@@ -2,19 +2,19 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { db } from '../classes/database';
-import type { ApiKey, ApiKeyWithPlainKey } from '../@types';
+import type { ApiKeyWithPlainKey } from '../@types';
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(100),
 });
 
-export const keysRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOptions) => {
+export const keysRoutes = async (fastify: FastifyInstance, _opts: FastifyPluginOptions) => {
   // List API keys for user
   fastify.get('/api/keys', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     try {
       const user = request.user;
 
-      const keys: ApiKey[] = await db.apiKey.findMany({
+      const keys = await db.apiKey.findMany({
         where: { userId: user.userId },
         select: {
           id: true,

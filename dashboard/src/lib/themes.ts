@@ -316,6 +316,23 @@ export const applyTheme = (themeId: string): void => {
   const resolvedId = resolveStoredThemeId(themeId);
   const theme = themes.find((t) => t.id === resolvedId) ?? getDefaultTheme();
   const root = document.documentElement;
+
+  // New semantic tokens (design framework)
+  root.style.setProperty('--primary', theme.primary);
+  root.style.setProperty('--primary-hover', theme.primaryHover);
+  root.style.setProperty('--success', theme.success);
+  root.style.setProperty('--warning', theme.warning);
+  root.style.setProperty('--danger', theme.destructive);
+  root.style.setProperty('--bg-base', theme.bg);
+  root.style.setProperty('--bg-surface', theme.surface);
+  root.style.setProperty('--bg-elevated', theme.card);
+  root.style.setProperty('--bg-input', theme.dark ? theme.card : theme.surface);
+  root.style.setProperty('--border', theme.border);
+  root.style.setProperty('--border-soft', theme.border);
+  root.style.setProperty('--text-1', theme.textPrimary);
+  root.style.setProperty('--text-2', theme.textMuted);
+
+  // Legacy --color-* vars (kept for backward compat)
   root.style.setProperty('--color-bg', theme.bg);
   root.style.setProperty('--color-surface', theme.surface);
   root.style.setProperty('--color-card', theme.card);
@@ -330,6 +347,7 @@ export const applyTheme = (themeId: string): void => {
   root.style.setProperty('--color-text-muted', theme.textMuted);
   root.style.setProperty('--color-info', '#64748b');
   root.style.setProperty('--color-fg', isLightHex(theme.bg) ? '#000000' : '#ffffff');
+
   root.setAttribute('data-theme', theme.dark ? 'dark' : 'light');
   document.body.style.background = theme.bg;
   document.body.style.color = theme.textPrimary;

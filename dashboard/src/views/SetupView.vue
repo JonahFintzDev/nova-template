@@ -33,7 +33,9 @@ const submit = async (): Promise<void> => {
   errorMessage.value = '';
   bLoading.value = true;
   try {
-    await authStore.register(username.value.trim(), password.value);
+    const u = username.value.trim();
+    const email = u.includes('@') ? u : `${u}@example.com`;
+    await authStore.register(u, email, password.value);
     await router.push('/');
   } catch {
     errorMessage.value = t('auth.errorTaken');

@@ -2,13 +2,13 @@
 import Fastify from 'fastify';
 import fastifyAuth from '@fastify/auth';
 import fastifyCors from '@fastify/cors';
+import fastifyJwt from '@fastify/jwt';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 // classes
 import { registerAuth } from './classes/auth';
@@ -21,6 +21,7 @@ import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { keysRoutes } from './routes/keys';
 import { settingsRoutes } from './routes/settings';
+import { twoFactorRoutes } from './routes/twofactor';
 
 const main = async (): Promise<void> => {
   ensureConfig();
@@ -76,14 +77,18 @@ const main = async (): Promise<void> => {
   });
 
   await fastify.register(fastifyAuth);
+  await fastify.register(fastifyJwt, { secret: config.jwtSecret });
   await fastify.register(fastifyWebsocket);
   await fastify.register(fastifyMultipart, { limits: { fileSize: 6 * 1024 * 1024 } });
 
   registerAuth(fastify);
 
+  fastify.decorate('config', config);
+
   // Register routes
   await fastify.register(healthRoutes);
   await fastify.register(authRoutes);
+  await fastify.register(twoFactorRoutes);
   await fastify.register(settingsRoutes);
   await fastify.register(adminRoutes);
   await fastify.register(keysRoutes);

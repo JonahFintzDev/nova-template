@@ -142,7 +142,7 @@ const setCommentsEnabled = async (enabled: boolean): Promise<void> => {
       <div class="field">
         <label class="label">{{ t('admin.registration') }}</label>
         <div
-          class="inline-flex w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
+          class="inline-flex self-start w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
         >
           <button
             type="button"
@@ -165,7 +165,7 @@ const setCommentsEnabled = async (enabled: boolean): Promise<void> => {
       <div class="field">
         <label class="label">{{ t('admin.comments') }}</label>
         <div
-          class="inline-flex w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
+          class="inline-flex self-start w-max max-w-full flex-wrap items-stretch gap-0.5 rounded-md border-0 bg-bg p-0.5"
         >
           <button
             type="button"

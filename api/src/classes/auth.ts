@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyPluginOptions } from 'fastify';
+import { FastifyInstance, FastifyPluginOptions, FastifyRequest, FastifyReply } from 'fastify';
 import { verify } from 'jsonwebtoken';
 import { config } from './config';
 import type { JwtPayload } from '../@types';
@@ -7,9 +7,16 @@ interface AuthOptions {
   jwtSecret?: string;
 }
 
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: JwtPayload;
+  }
+}
+
 declare module 'fastify' {
-  interface FastifyRequest {
-    user?: JwtPayload;
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    config: typeof config;
   }
 }
 
@@ -47,12 +54,10 @@ export const registerAuth = (fastify: FastifyInstance, options: FastifyPluginOpt
   });
 };
 
-// Helper to get user from request
 export const getUser = (request: FastifyRequest) => {
   return request.user;
 };
 
-// Helper to check if user is admin
 export const isAdmin = (request: FastifyRequest) => {
   return request.user?.isAdmin === true;
 };

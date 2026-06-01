@@ -1,14 +1,16 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { compare, hash } from 'bcrypt';
-import { sign } from 'jsonwebtoken';
+import { sign, verify as verifyJwt } from 'jsonwebtoken';
 import { z } from 'zod';
 import { db } from '../classes/database';
 import { config } from '../classes/config';
-import type { AuthResponse, ValidateResponse } from '../@types';
+import { verifyTwoFactorCode, validateBackupCode, useBackupCode } from '../classes/twofactor';
+import type { AuthResponse, ValidateResponse, JwtPayload } from '../@types';
 
 // Input validation schemas
 const registerSchema = z.object({
   username: z.string().min(1).max(50),
+  email: z.string().email(),
   password: z.string().min(6).max(100),
 });
 
@@ -17,9 +19,19 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const loginWithEmailSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(6).max(100),
+});
+
+const verifyTwoFactorLoginSchema = z.object({
+  userId: z.string(),
+  code: z.string().length(6),
 });
 
 // JWT token generation
@@ -27,34 +39,69 @@ const generateToken = (userId: string, username: string, isAdmin: boolean): stri
   return sign({ userId, username, isAdmin }, config.jwtSecret, { expiresIn: '7d' });
 };
 
-// Helper to get user by username with password
-const getUserWithPassword = async (username: string) => {
-  return db.user.findUnique({
-    where: { username },
+// Generate token with 2FA pending flag
+const generateTokenWith2FAPending = (
+  userId: string,
+  username: string,
+  isAdmin: boolean,
+): string => {
+  return sign(
+    { userId, username, isAdmin, twoFactorPending: true },
+    config.jwtSecret,
+    { expiresIn: '5m' }, // Short expiry for 2FA pending tokens
+  );
+};
+
+// Helper to get user by username or email with password
+const getUserWithPassword = async (usernameOrEmail: string) => {
+  return db.user.findFirst({
+    where: {
+      OR: [{ username: usernameOrEmail }, { email: usernameOrEmail }],
+    },
     select: {
       id: true,
       username: true,
+      email: true,
       password: true,
       isAdmin: true,
       avatarUrl: true,
+      twoFactorEnabled: true,
+      twoFactorSecret: true,
+      backupCodes: true,
     },
   });
 };
 
-export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOptions) => {
+// Verify JWT token
+export const verifyToken = (token: string): JwtPayload | null => {
+  try {
+    return verifyJwt(token, config.jwtSecret) as JwtPayload;
+  } catch {
+    return null;
+  }
+};
+
+export const authRoutes = async (fastify: FastifyInstance, _opts: FastifyPluginOptions) => {
   // Register a new user
   fastify.post('/api/auth/register', async (request, reply) => {
     try {
       const body = registerSchema.parse(request.body);
-      const { username, password } = body;
+      const { username, email, password } = body;
 
       // Check if user already exists
-      const existingUser = await db.user.findUnique({
-        where: { username },
+      const existingUser = await db.user.findFirst({
+        where: {
+          OR: [{ username }, { email }],
+        },
       });
 
       if (existingUser) {
-        return reply.code(409).send({ error: 'Username already taken' });
+        if (existingUser.username === username) {
+          return reply.code(409).send({ error: 'Username already taken' });
+        }
+        if (existingUser.email === email) {
+          return reply.code(409).send({ error: 'Email already registered' });
+        }
       }
 
       // Check if registration is allowed
@@ -70,8 +117,10 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
       const user = await db.user.create({
         data: {
           username,
+          email,
           password: hashedPassword,
           isAdmin: false,
+          emailVerified: new Date(), // Auto-verify for now
         },
       });
 
@@ -104,7 +153,7 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
       const body = loginSchema.parse(request.body);
       const { username, password } = body;
 
-      // Find user
+      // Find user by username or email
       const user = await getUserWithPassword(username);
 
       if (!user) {
@@ -112,13 +161,25 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
       }
 
       // Check password
-      const isValidPassword = await compare(password, user.password);
+      const isValidPassword = user.password ? await compare(password, user.password) : false;
 
       if (!isValidPassword) {
         return reply.code(401).send({ error: 'Invalid username or password' });
       }
 
-      // Generate token
+      // Check if 2FA is enabled
+      if (user.twoFactorEnabled) {
+        // Generate a token with 2FA pending flag
+        const token = generateTokenWith2FAPending(user.id, user.username, user.isAdmin);
+
+        return reply.send({
+          token,
+          requiresTwoFactor: true,
+          userId: user.id,
+        });
+      }
+
+      // Generate regular token
       const token = generateToken(user.id, user.username, user.isAdmin);
 
       const response: AuthResponse = { token };
@@ -132,10 +193,122 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
     }
   });
 
+  // Login with email
+  fastify.post('/api/auth/login/email', async (request, reply) => {
+    try {
+      const body = loginWithEmailSchema.parse(request.body);
+      const { email, password } = body;
+
+      // Find user by email
+      const user = await getUserWithPassword(email);
+
+      if (!user) {
+        return reply.code(401).send({ error: 'Invalid email or password' });
+      }
+
+      // Check password
+      const isValidPassword = user.password ? await compare(password, user.password) : false;
+
+      if (!isValidPassword) {
+        return reply.code(401).send({ error: 'Invalid email or password' });
+      }
+
+      // Check if 2FA is enabled
+      if (user.twoFactorEnabled) {
+        // Generate a token with 2FA pending flag
+        const token = generateTokenWith2FAPending(user.id, user.username, user.isAdmin);
+
+        return reply.send({
+          token,
+          requiresTwoFactor: true,
+          userId: user.id,
+        });
+      }
+
+      // Generate regular token
+      const token = generateToken(user.id, user.username, user.isAdmin);
+
+      const response: AuthResponse = { token };
+      return reply.send(response);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: 'Invalid input', details: error.errors });
+      }
+      console.error('Login error:', error);
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  // Verify 2FA and complete login
+  fastify.post('/api/auth/verify-twofactor', async (request, reply) => {
+    try {
+      const body = verifyTwoFactorLoginSchema.parse(request.body);
+      const { userId, code } = body;
+
+      // Get user's 2FA info
+      const user = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          isAdmin: true,
+          twoFactorSecret: true,
+          twoFactorEnabled: true,
+          backupCodes: true,
+        },
+      });
+
+      if (!user || !user.twoFactorEnabled) {
+        return reply.code(400).send({ error: '2FA is not enabled for this user' });
+      }
+
+      if (!user.twoFactorSecret) {
+        return reply.code(400).send({ error: '2FA secret is missing' });
+      }
+
+      // First, try to verify with the TOTP code
+      let isValid = verifyTwoFactorCode(code, user.twoFactorSecret);
+
+      // If TOTP fails, try backup codes
+      if (!isValid) {
+        const backupCodeValidation = validateBackupCode(code, user.backupCodes);
+        if (backupCodeValidation.valid && backupCodeValidation.index !== null) {
+          // Use the backup code
+          await useBackupCode(userId, backupCodeValidation.index);
+          isValid = true;
+        }
+      }
+
+      if (!isValid) {
+        return reply.code(400).send({ error: 'Invalid verification code' });
+      }
+
+      // Generate a full token
+      const token = generateToken(user.id, user.username, user.isAdmin);
+
+      const response: AuthResponse = { token };
+      return reply.send(response);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: 'Invalid input', details: error.errors });
+      }
+      console.error('Verify 2FA error:', error);
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+  });
+
   // Validate token
   fastify.post('/api/auth/validate', async (request, reply) => {
     try {
-      const user = request.user;
+      // Soft auth — set request.user if a valid token is present, but don't reject
+      const authHeader = request.headers.authorization;
+      if (authHeader) {
+        const rawToken = authHeader.replace('Bearer ', '');
+        const decoded = verifyToken(rawToken);
+        if (decoded) request.user = decoded;
+      }
+
+      const user = request.user as JwtPayload | undefined;
 
       if (!user) {
         const response: ValidateResponse = {
@@ -143,6 +316,21 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
           username: null,
           userId: null,
           isAdmin: false,
+        };
+        return reply.send(response);
+      }
+
+      // Check if token has pending 2FA
+      const isPending2FA = user.twoFactorPending === true;
+
+      if (isPending2FA) {
+        const response: ValidateResponse = {
+          valid: true,
+          username: user.username,
+          userId: user.userId,
+          isAdmin: user.isAdmin,
+          avatarUrl: undefined,
+          requiresTwoFactor: true,
         };
         return reply.send(response);
       }
@@ -155,6 +343,7 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
           username: true,
           isAdmin: true,
           avatarUrl: true,
+          twoFactorEnabled: true,
         },
       });
 
@@ -174,6 +363,7 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
         userId: freshUser.id,
         isAdmin: freshUser.isAdmin,
         avatarUrl: freshUser.avatarUrl ?? undefined,
+        twoFactorEnabled: freshUser.twoFactorEnabled,
       };
 
       return reply.send(response);
@@ -204,6 +394,10 @@ export const authRoutes = async (fastify: FastifyInstance, opts: FastifyPluginOp
 
         if (!currentUser) {
           return reply.code(404).send({ error: 'User not found' });
+        }
+
+        if (!currentUser.password) {
+          return reply.code(400).send({ error: 'Password not set on account' });
         }
 
         // Verify current password

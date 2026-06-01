@@ -17,9 +17,6 @@ export const checkDatabase = async (): Promise<boolean> => {
 
 // Initialize database with default settings if needed
 export const initializeDatabase = async (): Promise<void> => {
-  // Check if any user exists
-  const userCount = await db.user.count();
-
   // Check if app settings exist
   const settingsCount = await db.appSettings.count();
 

@@ -7,7 +7,7 @@ interface Props {
   title: string;
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 const slots = useSlots();
 </script>
 

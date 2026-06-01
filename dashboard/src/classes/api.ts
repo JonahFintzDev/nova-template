@@ -91,36 +91,97 @@ export const healthApi = {
 
 // -------------------------------------------------- Auth --------------------------------------------------
 
+export interface AuthResponse {
+  token: string;
+  requiresTwoFactor?: boolean;
+  userId?: string;
+}
+
+export interface ValidateResponse {
+  valid: boolean;
+  username: string | null;
+  userId: string | null;
+  isAdmin: boolean;
+  avatarUrl?: string | null;
+  twoFactorEnabled?: boolean;
+  requiresTwoFactor?: boolean;
+}
+
 export const authApi = {
-  async register(username: string, password: string): Promise<{ token: string }> {
-    const response = await api.post<{ token: string }>('/api/auth/register', {
+  async register(username: string, email: string, password: string): Promise<AuthResponse> {
+    const response = await api.post<AuthResponse>('/api/auth/register', {
       username,
+      email,
       password,
     });
     return response.data;
   },
-  async login(username: string, password: string): Promise<{ token: string }> {
-    const response = await api.post<{ token: string }>('/api/auth/login', { username, password });
+  async login(username: string, password: string): Promise<AuthResponse> {
+    const response = await api.post<AuthResponse>('/api/auth/login', { username, password });
     return response.data;
   },
-  async validate(): Promise<{
-    valid: boolean;
-    username: string | null;
-    userId: string | null;
-    isAdmin: boolean;
-    avatarUrl?: string | null;
-  }> {
-    const response = await api.post<{
-      valid: boolean;
-      username: string | null;
-      userId: string | null;
-      isAdmin: boolean;
-      avatarUrl?: string | null;
-    }>('/api/auth/validate');
+  async loginWithEmail(email: string, password: string): Promise<AuthResponse> {
+    const response = await api.post<AuthResponse>('/api/auth/login/email', { email, password });
+    return response.data;
+  },
+  async validate(): Promise<ValidateResponse> {
+    const response = await api.post<ValidateResponse>('/api/auth/validate');
+    return response.data;
+  },
+  async verifyTwoFactor(userId: string, code: string): Promise<AuthResponse> {
+    const response = await api.post<AuthResponse>('/api/auth/verify-twofactor', { userId, code });
     return response.data;
   },
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await api.patch('/api/auth/password', { currentPassword, newPassword });
+  },
+};
+
+// -------------------------------------------------- 2FA --------------------------------------------------
+
+export interface TwoFactorSetupInfo {
+  enabled: boolean;
+  qrCodeUrl?: string | null;
+  secret?: string | null;
+  backupCodes?: string[] | null;
+}
+
+export interface TwoFactorGenerateResponse {
+  secret: string;
+  qrCodeUrl: string;
+  backupCodes: string[];
+}
+
+export const twoFactorApi = {
+  async getSetupInfo(): Promise<TwoFactorSetupInfo> {
+    const response = await api.get<TwoFactorSetupInfo>('/api/auth/2fa/setup');
+    return response.data;
+  },
+  async generateSecret(): Promise<TwoFactorGenerateResponse> {
+    const response = await api.post<TwoFactorGenerateResponse>('/api/auth/2fa/generate');
+    return response.data;
+  },
+  async enableTwoFactor(code: string): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/api/auth/2fa/enable', {
+      code,
+    });
+    return response.data;
+  },
+  async disableTwoFactor(password: string): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>(
+      '/api/auth/2fa/disable',
+      { password },
+    );
+    return response.data;
+  },
+  async regenerateBackupCodes(
+    password: string,
+  ): Promise<{ success: boolean; backupCodes: string[] }> {
+    const response = await api.post<{ success: boolean; backupCodes: string[] }>(
+      '/api/auth/2fa/backup-codes/regenerate',
+      { password },
+    );
+    return response.data;
   },
 };
 
@@ -192,94 +253,3 @@ export const avatarApi = {
     await api.delete('/api/users/avatar');
   },
 };
-
-// -------------------------------------------------- WebSocket --------------------------------------------------
-
-export type WsMessage = { type: 'pong' };
-
-type WsListener = (msg: WsMessage) => void;
-
-class AppWebSocket {
-  private ws: WebSocket | null = null;
-  private listeners = new Set<WsListener>();
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  private shouldConnect = false;
-
-  connect(): void {
-    this.shouldConnect = true;
-    this.open();
-  }
-
-  disconnect(): void {
-    this.shouldConnect = false;
-    this.cleanup();
-  }
-
-  on(listener: WsListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  private open(): void {
-    if (this.ws) return;
-    const token = getStoredToken();
-    if (!token) return;
-
-    const baseUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
-    const wsBase = baseUrl
-      ? baseUrl.replace(/^http/, 'ws')
-      : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
-
-    this.ws = new WebSocket(`${wsBase}/api/ws?token=${encodeURIComponent(token)}`);
-
-    this.ws.onopen = () => {
-      this.pingInterval = setInterval(() => {
-        this.ws?.send(JSON.stringify({ type: 'ping' }));
-      }, 30_000);
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data as string) as WsMessage;
-        for (const listener of this.listeners) {
-          listener(msg);
-        }
-      } catch {
-        // ignore malformed
-      }
-    };
-
-    this.ws.onclose = () => {
-      this.cleanup();
-      if (this.shouldConnect) {
-        this.reconnectTimeout = setTimeout(() => this.open(), 5_000);
-      }
-    };
-
-    this.ws.onerror = () => {
-      this.ws?.close();
-    };
-  }
-
-  private cleanup(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-    if (this.ws) {
-      this.ws.onopen = null;
-      this.ws.onmessage = null;
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.close();
-      this.ws = null;
-    }
-  }
-}
-
-export const appWs = new AppWebSocket();

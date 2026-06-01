@@ -1,73 +1,134 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["public"]
 }
+
+// ============================================
+// PUBLIC SCHEMA - Central Auth & Shared Settings
+// ============================================
 
 model User {
-  id            String    @id @default(uuid())
-  username      String    @unique
-  password      String    // bcrypt hashed
-  isAdmin       Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  // User settings
-  language      String    @default("en")
-  autoTheme     Boolean   @default(true)
-  darkTheme     String?
-  lightTheme    String?
-  aiFeaturesDisabled Boolean @default(false)
-  avatarUrl     String?
-
-  // Relations
-  apiKeys       ApiKey[]
-  settings      UserSettings?
-
-  @@map("users")
-}
-
-model ApiKey {
-  id            String    @id @default(uuid())
-  name          String
-  key           String    @unique // The actual key (plaintext, only shown once)
-  keyPrefix     String    // First 8 chars for display
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt     DateTime  @default(now())
-  lastUsedAt    DateTime?
-  
-  @@map("api_keys")
-}
-
-model UserSettings {
-  id            String    @id @default(uuid())
-  userId        String    @unique
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  language      String    @default("en")
-  autoTheme     Boolean   @default(true)
-  darkTheme     String?   @default("deep-space")
-  lightTheme    String?   @default("taskscape")
-  aiFeaturesDisabled Boolean @default(false)
-  
-  @@map("user_settings")
-}
-
-model AppSettings {
-  id                  String    @id @default(uuid())
-  registrationEnabled Boolean   @default(true)
-  commentsEnabled    Boolean   @default(true)
-  aiApiUrl            String?
-  aiApiKey            String?   // Encrypted or masked
-  aiModel             String?
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  username           String    @unique
+  password           String?
+  name               String?
+  emailVerified      DateTime?
+  isAdmin            Boolean   @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
+  // 2FA
+  twoFactorSecret    String?
+  twoFactorEnabled   Boolean   @default(false)
+  backupCodes        String[]
+
+  // User settings (denormalised for fast reads)
+  language           String    @default("en")
+  theme              String    @default("Auto")
+  avatarUrl          String?
+  autoTheme          Boolean   @default(true)
+  darkTheme          String?
+  lightTheme         String?
+  aiFeaturesDisabled Boolean   @default(false)
+
+  // Relations
+  accounts           Account[]
+  sessions           Session[]
+  apiKeys            ApiKey[]
+  settings           UserSettings?
+
+  @@schema("public")
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId])
+  @@schema("public")
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@schema("public")
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@schema("public")
+  @@map("verification_tokens")
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  key        String    @unique
+  keyPrefix  String
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@schema("public")
+  @@map("api_keys")
+}
+
+model AppSettings {
+  id                  String   @id @default(cuid())
+  registrationEnabled Boolean  @default(true)
+  commentsEnabled     Boolean  @default(true)
+  aiApiUrl            String?
+  aiApiKey            String?
+  aiModel             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@schema("public")
   @@map("app_settings")
+}
+
+model UserSettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language           String   @default("en")
+  autoTheme          Boolean  @default(true)
+  darkTheme          String?
+  lightTheme         String?
+  aiFeaturesDisabled Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@schema("public")
+  @@map("user_settings")
 }

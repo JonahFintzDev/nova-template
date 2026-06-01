@@ -13,6 +13,7 @@ import App from '@/App.vue';
 
 // assets
 import '@/assets/css/main.css';
+import '@vuepic/vue-datepicker/dist/main.css';
 
 import 'dayjs/locale/de';
 import 'dayjs/locale/en';
@@ -29,10 +30,10 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        console.warn('ServiceWorker registration successful with scope: ', registration.scope);
       })
       .catch((err) => {
-        console.log('ServiceWorker registration failed: ', err);
+        console.warn('ServiceWorker registration failed: ', err);
       });
   });
 }
